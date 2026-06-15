@@ -16,28 +16,91 @@ export default class Player {
   }
 
   create() {
-    const x = LANE_X_POSITIONS[this.currentLane]
-    const y = PLAYER_Y
+    const x    = LANE_X_POSITIONS[this.currentLane]
+    const y    = PLAYER_Y
+    const halfH = PLAYER_HEIGHT / 2
 
-    // Shadow shown while airborne — sits behind everything
-    this.shadow = this.scene.add.ellipse(x, y + 4, PLAYER_WIDTH + 12, 14, 0x000000, 0.35)
+    // Shadow shown while airborne
+    this.shadow = this.scene.add.ellipse(x, y + 4, PLAYER_WIDTH + 16, 14, 0x000000, 0.35)
     this.shadow.setDepth(1)
     this.shadow.setVisible(false)
 
-    // Character parts (relative to container origin)
-    const halfH = PLAYER_HEIGHT / 2
-    const body  = this.scene.add.rectangle(0, 2,       PLAYER_WIDTH, PLAYER_HEIGHT, 0x3498db)
-    const head  = this.scene.add.circle(0, -halfH - 10, 13, 0xf5cba7)
-    const hair  = this.scene.add.ellipse(0, -halfH - 17, 22, 10, 0x5d4037)
-    const eyeL  = this.scene.add.circle(-4, -halfH - 12, 2.5, 0x2c3e50)
-    const eyeR  = this.scene.add.circle( 4, -halfH - 12, 2.5, 0x2c3e50)
-    this._legL  = this.scene.add.rectangle(-6, halfH + 8, 9, 16, 0x27ae60)
-    this._legR  = this.scene.add.rectangle( 6, halfH + 8, 9, 16, 0x27ae60)
+    // ── Survivor character parts (container-local coords, back → front) ──
 
+    // Backpack (behind body — drawn first)
+    const pack     = this.scene.add.rectangle(2, -2, PLAYER_WIDTH - 6, PLAYER_HEIGHT - 8, 0x7a6238)
+    const packTop  = this.scene.add.ellipse(2, -halfH + 4, PLAYER_WIDTH - 10, 10, 0x6a5228)
+    const strapL   = this.scene.add.rectangle(-5, 2, 3, PLAYER_HEIGHT - 14, 0x5a4820)
+    const strapR   = this.scene.add.rectangle( 9, 2, 3, PLAYER_HEIGHT - 14, 0x5a4820)
+
+    // Body — olive military jacket
+    const body = this.scene.add.rectangle(0, 0, PLAYER_WIDTH, PLAYER_HEIGHT, 0x4b5320)
+
+    // Jacket collar (two angled dark rectangles forming a V-neck)
+    const lapelL = this.scene.add.rectangle(-5, -halfH + 8, 5, 14, 0x3d4418)
+    lapelL.rotation = -0.35
+    const lapelR = this.scene.add.rectangle( 5, -halfH + 8, 5, 14, 0x3d4418)
+    lapelR.rotation = 0.35
+
+    // Arms (swing during run animation)
+    this._armL  = this.scene.add.rectangle(-PLAYER_WIDTH / 2 - 5, 0,  8, 22, 0x4b5320)
+    this._armR  = this.scene.add.rectangle( PLAYER_WIDTH / 2 + 5, 0,  8, 22, 0x4b5320)
+    this._gloveL = this.scene.add.circle(-PLAYER_WIDTH / 2 - 5, 13, 4, 0x8b6030)
+    this._gloveR = this.scene.add.circle( PLAYER_WIDTH / 2 + 5, 13, 4, 0x8b6030)
+
+    // Belt
+    const belt   = this.scene.add.rectangle(0, halfH - 6, PLAYER_WIDTH + 2, 5, 0x2a1e0e)
+    const buckle = this.scene.add.rectangle(0, halfH - 6, 8, 5, 0xb08020)
+
+    // Cargo pants
+    const pants = this.scene.add.rectangle(0, halfH + 5, PLAYER_WIDTH + 2, 12, 0x3d2e1a)
+
+    // Boots
+    this._legL = this.scene.add.rectangle(-6, halfH + 14, 10, 14, 0x1e120a)
+    this._legR = this.scene.add.rectangle( 6, halfH + 14, 10, 14, 0x1e120a)
+    // Boot highlight
+    const bootHL = this.scene.add.rectangle(-8, halfH + 10, 3, 6, 0x3a2818)
+    const bootHR = this.scene.add.rectangle( 4, halfH + 10, 3, 6, 0x3a2818)
+
+    // Head — tanned survivor skin
+    const head = this.scene.add.circle(0, -halfH - 10, 13, 0xc8814a)
+
+    // Stubble / jaw shadow
+    const beard = this.scene.add.ellipse(0, -halfH - 4, 17, 8, 0x9a5c28, 0.6)
+
+    // Boonie hat brim (large flat ellipse)
+    const hatBrim = this.scene.add.ellipse(0, -halfH - 19, 34, 11, 0x3a3c1e)
+    // Hat crown
+    const hatCrown = this.scene.add.ellipse(0, -halfH - 23, 22, 11, 0x3a3c1e)
+    // Hat band detail
+    const hatBand = this.scene.add.rectangle(0, -halfH - 18, 22, 3, 0x5a5228)
+
+    // Eyes — whites with dark pupils
+    const ewL  = this.scene.add.circle(-4, -halfH - 11, 3.5, 0xffffff)
+    const ewR  = this.scene.add.circle( 4, -halfH - 11, 3.5, 0xffffff)
+    const eyeL = this.scene.add.circle(-4, -halfH - 11, 2,   0x1a1a2e)
+    const eyeR = this.scene.add.circle( 4, -halfH - 11, 2,   0x1a1a2e)
+
+    // Build container — order = painter's order (first = behind)
     this.container = this.scene.add.container(x, y, [
-      body, head, hair, eyeL, eyeR, this._legL, this._legR,
+      // Backpack layer
+      pack, packTop, strapL, strapR,
+      // Body
+      body,
+      // Arms (behind body edges — drawn before jacket details)
+      this._armL, this._armR,
+      this._gloveL, this._gloveR,
+      // Jacket detail
+      lapelL, lapelR,
+      // Lower body
+      belt, buckle, pants,
+      // Legs/boots
+      this._legL, this._legR, bootHL, bootHR,
+      // Head layers (front)
+      head, beard,
+      hatBrim, hatCrown, hatBand,
+      ewL, ewR, eyeL, eyeR,
     ])
-    // Depth 2: sits behind obstacles (depth 3) normally; raised to 5 while jumping
     this.container.setDepth(2)
 
     this.cursors  = this.scene.input.keyboard.createCursorKeys()
@@ -48,7 +111,7 @@ export default class Player {
 
     this._legPhase = 0
     this._legTimer = this.scene.time.addEvent({
-      delay: 120, callback: this._animateLegs, callbackScope: this, loop: true,
+      delay: 110, callback: this._animateLegs, callbackScope: this, loop: true,
     })
 
     return this
@@ -120,8 +183,6 @@ export default class Player {
     this.isJumping = true
     this.shadow.setVisible(true)
     this.shadow.setScale(1)
-
-    // Rise above obstacles while airborne
     this.container.setDepth(5)
 
     this._jumpTween = this.scene.tweens.add({
@@ -134,7 +195,6 @@ export default class Player {
         this.isJumping = false
         this.shadow.setVisible(false)
         this.container.setScale(1)
-        // Return behind obstacles on landing
         this.container.setDepth(2)
       },
     })
@@ -151,8 +211,14 @@ export default class Player {
   _animateLegs() {
     if (!this.isAlive || this.isJumping) return
     this._legPhase = (this._legPhase + 1) % 2
-    const offset = this._legPhase === 0 ? 4 : -4
-    this._legL.y = PLAYER_HEIGHT / 2 + 8 + offset
-    this._legR.y = PLAYER_HEIGHT / 2 + 8 - offset
+    const offset = this._legPhase === 0 ? 5 : -5
+    const halfH  = PLAYER_HEIGHT / 2
+    this._legL.y  = halfH + 14 + offset
+    this._legR.y  = halfH + 14 - offset
+    // Arms swing opposite to same-side leg
+    this._armL.y   = offset * 0.6
+    this._armR.y   = -offset * 0.6
+    this._gloveL.y = 13 + offset * 0.6
+    this._gloveR.y = 13 - offset * 0.6
   }
 }

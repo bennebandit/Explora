@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import Player from '../objects/Player.js'
 import Obstacle from '../objects/Obstacle.js'
+import Coin from '../objects/Coin.js'
 import { musicManager } from '../audio/MusicManager.js'
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
@@ -10,6 +11,7 @@ import {
   INITIAL_SCROLL_SPEED, SPEED_INCREMENT, MAX_SCROLL_SPEED,
   INITIAL_SPAWN_INTERVAL, SPAWN_INTERVAL_DECREMENT, MIN_SPAWN_INTERVAL,
   RAMP_INTERVAL, SCORE_MULTIPLIER,
+  COIN_BONUS, COIN_SPAWN_INTERVAL,
 } from '../config/gameConfig.js'
 
 export default class GameScene extends Phaser.Scene {
@@ -23,6 +25,7 @@ export default class GameScene extends Phaser.Scene {
     this._spawnInterval = INITIAL_SPAWN_INTERVAL
     this._gameOver = false
     this._obstacles = []
+    this._coins = []
 
     this._buildBackground()
     this._buildHUD()
@@ -39,6 +42,13 @@ export default class GameScene extends Phaser.Scene {
     this._rampTimer = this.time.addEvent({
       delay: RAMP_INTERVAL,
       callback: this._ramp,
+      callbackScope: this,
+      loop: true,
+    })
+
+    this._coinSpawner = this.time.addEvent({
+      delay: COIN_SPAWN_INTERVAL,
+      callback: this._spawnCoins,
       callbackScope: this,
       loop: true,
     })
@@ -71,12 +81,31 @@ export default class GameScene extends Phaser.Scene {
         continue
       }
 
-      // Collision: same lane, obstacle at player Y, player on ground
-      if (!this._player.isInAir() &&
-          obs.getLane() === this._player.getLane() &&
-          this._obstacleReachedPlayer(obs)) {
+      // Trunk spans all lanes (mustJump); normal obstacles check lane match
+      const laneHit = obs.mustJump || obs.getLane() === this._player.getLane()
+      if (!this._player.isInAir() && laneHit && this._obstacleReachedPlayer(obs)) {
         this._triggerGameOver()
         return
+      }
+    }
+
+    for (let i = this._coins.length - 1; i >= 0; i--) {
+      const coin = this._coins[i]
+      coin.scrollSpeed = this._scrollSpeed
+      coin.update(delta)
+
+      if (coin._destroyed || coin.isOffScreen()) {
+        if (!coin._destroyed) coin.destroy()
+        this._coins.splice(i, 1)
+        continue
+      }
+
+      if (!coin.isCollected() &&
+          coin.getLane() === this._player.getLane() &&
+          Math.abs(PLAYER_Y - coin.y) < 24) {
+        coin.collect()
+        this._score += COIN_BONUS
+        this._showCoinBonus(coin.x)
       }
     }
 
@@ -112,36 +141,81 @@ export default class GameScene extends Phaser.Scene {
   _createForestTexture() {
     if (this.textures.exists('forest-tile')) return
 
-    const size = 120
+    const size = 128
     const g = this.make.graphics({ add: false })
 
-    // Forest floor
-    g.fillStyle(0x1f4a1f, 1)
+    // Multi-tone forest floor base
+    g.fillStyle(0x1a3d18, 1)
     g.fillRect(0, 0, size, size)
 
-    // Pine trees — each drawn as layered circles (outer canopy → inner shadow → trunk)
+    // Irregular ground color patches (depth variation)
+    const patches = [
+      { x: 20,  y: 10,  w: 40, h: 28, c: 0x213f1a },
+      { x: 70,  y: 40,  w: 50, h: 35, c: 0x163014 },
+      { x: 10,  y: 70,  w: 35, h: 40, c: 0x22421c },
+      { x: 90,  y: 5,   w: 38, h: 30, c: 0x183818 },
+      { x: 50,  y: 100, w: 60, h: 28, c: 0x1b3e18 },
+    ]
+    for (const p of patches) {
+      g.fillStyle(p.c, 0.6)
+      g.fillEllipse(p.x, p.y, p.w, p.h)
+    }
+
+    // Scattered leaf/debris litter
+    const litter = [
+      { x: 8,   y: 35,  c: 0x4a6a20 }, { x: 42,  y: 8,   c: 0x8a7020 },
+      { x: 65,  y: 55,  c: 0x5a4a10 }, { x: 110, y: 25,  c: 0x6a5a18 },
+      { x: 30,  y: 95,  c: 0x3a5218 }, { x: 95,  y: 88,  c: 0x7a6820 },
+      { x: 18,  y: 60,  c: 0x4e6a1a }, { x: 80,  y: 115, c: 0x5a4a12 },
+      { x: 52,  y: 125, c: 0x3a5010 }, { x: 115, y: 60,  c: 0x6a5218 },
+    ]
+    for (const l of litter) {
+      g.fillStyle(l.c, 0.75)
+      g.fillEllipse(l.x, l.y, 6, 4)
+    }
+
+    // Undergrowth / fern patches (small bush clusters)
+    const shrubs = [
+      { x: 105, y: 50, r: 7 }, { x: 38, y: 110, r: 6 }, { x: 8, y: 50, r: 5 },
+    ]
+    for (const s of shrubs) {
+      g.fillStyle(0x1a5c1a, 0.8)
+      g.fillCircle(s.x - 4, s.y,     s.r)
+      g.fillCircle(s.x + 4, s.y - 2, s.r * 0.8)
+      g.fillCircle(s.x,     s.y + 4, s.r * 0.7)
+      g.fillStyle(0x257225, 0.6)
+      g.fillCircle(s.x - 3, s.y - 1, s.r * 0.5)
+    }
+
+    // Pine trees — layered canopy with light/shadow zones
     const trees = [
-      { x: 24, y: 26, r: 19 },
-      { x: 82, y: 18, r: 15 },
-      { x: 55, y: 72, r: 17 },
-      { x: 100, y: 80, r: 13 },
-      { x: 14, y: 88, r: 12 },
-      { x: 72, y: 105, r: 14 },  // wraps into next tile row — creates continuity
+      { x: 26,  y: 28,  r: 20 },
+      { x: 84,  y: 16,  r: 16 },
+      { x: 56,  y: 74,  r: 18 },
+      { x: 104, y: 82,  r: 14 },
+      { x: 12,  y: 92,  r: 13 },
+      { x: 74,  y: 108, r: 15 },
     ]
 
     for (const t of trees) {
-      // Drop shadow (offset)
-      g.fillStyle(0x0f2a0f, 0.5)
-      g.fillCircle(t.x + 2, t.y + 3, t.r)
-      // Outer canopy
-      g.fillStyle(0x1e6b1e, 1)
+      // Ground shadow (elongated toward bottom-right)
+      g.fillStyle(0x0a1e0a, 0.55)
+      g.fillEllipse(t.x + 4, t.y + 5, t.r * 2.1, t.r * 1.5)
+      // Outer canopy (mid green)
+      g.fillStyle(0x206b1e, 1)
       g.fillCircle(t.x, t.y, t.r)
-      // Inner darker layer (pine depth)
-      g.fillStyle(0x14520f, 1)
-      g.fillCircle(t.x, t.y, t.r * 0.55)
-      // Trunk/center hole
-      g.fillStyle(0x5d3a1a, 1)
-      g.fillCircle(t.x, t.y, t.r * 0.2)
+      // Sun-facing highlight (upper-left arc)
+      g.fillStyle(0x2e9428, 0.7)
+      g.fillCircle(t.x - t.r * 0.25, t.y - t.r * 0.2, t.r * 0.75)
+      // Inner shadow layer
+      g.fillStyle(0x124d0f, 1)
+      g.fillCircle(t.x + t.r * 0.1, t.y + t.r * 0.1, t.r * 0.52)
+      // Trunk
+      g.fillStyle(0x6b4020, 1)
+      g.fillCircle(t.x, t.y, t.r * 0.18)
+      // Canopy tip highlight dot
+      g.fillStyle(0x3ab030, 0.5)
+      g.fillCircle(t.x - t.r * 0.3, t.y - t.r * 0.35, t.r * 0.22)
     }
 
     g.generateTexture('forest-tile', size, size)
@@ -152,7 +226,7 @@ export default class GameScene extends Phaser.Scene {
   _createTrailTexture() {
     if (this.textures.exists('trail-tile')) return
 
-    const tileH = 64
+    const tileH = 80
     const tileW = TRAIL_WIDTH   // 314
 
     // Divider X positions relative to the trail's left edge
@@ -161,19 +235,66 @@ export default class GameScene extends Phaser.Scene {
 
     const g = this.make.graphics({ add: false })
 
-    // Dirt base
-    g.fillStyle(0x8B7355, 1)
+    // Dirt base — mid tan
+    g.fillStyle(0x8B7050, 1)
     g.fillRect(0, 0, tileW, tileH)
 
-    // Subtle dirt variation
-    g.fillStyle(0x7a6548, 0.4)
-    g.fillRect(0, 0, tileW, 2)
-    g.fillRect(0, tileH - 2, tileW, 2)
+    // Color variation patches across the trail surface
+    const dirtPatches = [
+      { x: 40,  y: 20, w: 80,  h: 30, c: 0x7a6244, a: 0.45 },
+      { x: 180, y: 10, w: 60,  h: 25, c: 0x9a8060, a: 0.35 },
+      { x: 260, y: 45, w: 70,  h: 30, c: 0x7a6040, a: 0.4  },
+      { x: 110, y: 55, w: 100, h: 28, c: 0x917060, a: 0.3  },
+      { x: 20,  y: 60, w: 50,  h: 22, c: 0x806050, a: 0.35 },
+    ]
+    for (const p of dirtPatches) {
+      g.fillStyle(p.c, p.a)
+      g.fillEllipse(p.x, p.y, p.w, p.h)
+    }
 
-    // Dashed lane dividers baked into the tile (dash then gap per tile height)
-    const dashLen = 26
-    const dashY   = 6
-    g.fillStyle(0xc8a96e, 0.55)
+    // Inner trail (packed center, slightly darker)
+    g.fillStyle(0x7a6245, 0.25)
+    g.fillRect(div1 + 8, 0, div2 - div1 - 16, tileH)
+
+    // Edge darkening (shadows at trail sides)
+    g.fillStyle(0x5a4830, 0.35)
+    g.fillRect(0, 0, 18, tileH)
+    g.fillRect(tileW - 18, 0, 18, tileH)
+
+    // Small pebble clusters
+    const pebbles = [
+      { x: 30,  y: 15 }, { x: 88,  y: 52 }, { x: 145, y: 28 },
+      { x: 200, y: 65 }, { x: 255, y: 18 }, { x: 295, y: 55 },
+      { x: 60,  y: 70 }, { x: 175, y: 10 }, { x: 240, y: 40 },
+    ]
+    for (const p of pebbles) {
+      g.fillStyle(0x6a5a40, 0.7)
+      g.fillCircle(p.x,     p.y,     3.5)
+      g.fillStyle(0x7a6a50, 0.7)
+      g.fillCircle(p.x + 6, p.y + 4, 2.5)
+      g.fillStyle(0x5a4a30, 0.5)
+      g.fillCircle(p.x + 3, p.y - 3, 2)
+    }
+
+    // Occasional root crossing the trail
+    g.fillStyle(0x5a3e20, 0.5)
+    g.fillRect(60, 38, 80, 3)
+    g.fillStyle(0x6a4e28, 0.35)
+    g.fillRect(62, 36, 76, 2)
+
+    // Footprint impressions (two oval tracks down center lane)
+    const footY = [8, 28, 48, 68]
+    for (const fy of footY) {
+      g.fillStyle(0x6a5535, 0.4)
+      g.fillEllipse(div1 + 30, fy, 8, 12)
+      g.fillEllipse(div1 + 50, fy + 10, 8, 12)
+    }
+
+    // Dashed lane dividers
+    const dashLen = 32
+    const dashY   = 8
+    const gap     = tileH - dashLen - dashY   // ~32 px gap
+    g.fillStyle(0xc8a870, 0.6)
     g.fillRect(div1 - 1, dashY, 2, dashLen)
     g.fillRect(div2 - 1, dashY, 2, dashLen)
 
@@ -204,10 +325,23 @@ export default class GameScene extends Phaser.Scene {
   // ─── Spawning ─────────────────────────────────────────────────────────────────
 
   _spawnObstacle() {
+    // 15% chance: spawn a trunk (must-jump, spans all lanes)
+    if (Math.random() < 0.15) {
+      this._obstacles.push(new Obstacle(this, 1, 'trunk', this._scrollSpeed).create())
+      return
+    }
     const lane = Phaser.Math.Between(0, LANE_COUNT - 1)
     const type = Obstacle.randomType()
-    const obs  = new Obstacle(this, lane, type, this._scrollSpeed).create()
-    this._obstacles.push(obs)
+    this._obstacles.push(new Obstacle(this, lane, type, this._scrollSpeed).create())
+  }
+
+  _spawnCoins() {
+    // Spawn 1–3 coins spread across random lanes in a horizontal cluster
+    const count = Phaser.Math.Between(1, 3)
+    const lanes = Phaser.Utils.Array.Shuffle([0, 1, 2]).slice(0, count)
+    for (const lane of lanes) {
+      this._coins.push(new Coin(this, lane, this._scrollSpeed).create())
+    }
   }
 
   // ─── Collision ────────────────────────────────────────────────────────────────
@@ -215,6 +349,22 @@ export default class GameScene extends Phaser.Scene {
   _obstacleReachedPlayer(obs) {
     const threshold = obs.rect.height / 2 + 18
     return Math.abs(PLAYER_Y - obs.rect.y) < threshold
+  }
+
+  // ─── Coin popup ───────────────────────────────────────────────────────────────
+
+  _showCoinBonus(x) {
+    const txt = this.add.text(x, PLAYER_Y - 30, `+${COIN_BONUS}m`, {
+      fontFamily: 'monospace', fontSize: '22px', color: '#f1c40f',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(10)
+
+    this.tweens.add({
+      targets: txt,
+      y: PLAYER_Y - 90, alpha: 0,
+      duration: 850, ease: 'Quad.easeOut',
+      onComplete: () => txt.destroy(),
+    })
   }
 
   // ─── Difficulty ───────────────────────────────────────────────────────────────
@@ -242,6 +392,7 @@ export default class GameScene extends Phaser.Scene {
 
     this._spawnerTimer.destroy()
     this._rampTimer.destroy()
+    this._coinSpawner.destroy()
     this._player.die()
 
     this.cameras.main.shake(350, 0.018)

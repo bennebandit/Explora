@@ -23,12 +23,18 @@ export const LANE_SWITCH_DURATION = 120    // ms for lane tween
 export const INPUT_COOLDOWN = 130
 
 // Obstacles (width = across-trail axis, height = along-trail axis)
+// Note: 'trunk' is a special must-jump obstacle — excluded from randomType()
 export const OBSTACLE_TYPES = {
-  snake:    { color: 0x2ecc71, width: 62, height: 16, label: 'Snake' },
-  log:      { color: 0x8B4513, width: 85, height: 26, label: 'Log' },
-  squirrel: { color: 0xe67e22, width: 28, height: 30, label: 'Squirrel' },
-  stone:    { color: 0x95a5a6, width: 38, height: 38, label: 'Stone' },
+  snake:    { color: 0x2ecc71, width: 62,  height: 16, label: 'Snake' },
+  log:      { color: 0x8B4513, width: 85,  height: 26, label: 'Log' },
+  squirrel: { color: 0xe67e22, width: 28,  height: 30, label: 'Squirrel' },
+  stone:    { color: 0x95a5a6, width: 38,  height: 38, label: 'Stone' },
+  trunk:    { color: 0x6b3a1f, width: 260, height: 34, label: 'Trunk' },
 }
+
+// Coins
+export const COIN_BONUS = 50           // meters added per coin collected
+export const COIN_SPAWN_INTERVAL = 3200 // ms between coin cluster spawns
 
 // Difficulty / speed
 export const INITIAL_SCROLL_SPEED = 280
