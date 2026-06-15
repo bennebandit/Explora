@@ -38,7 +38,7 @@ export const COIN_SPAWN_INTERVAL = 3200 // ms between coin cluster spawns
 
 // Difficulty / speed
 export const INITIAL_SCROLL_SPEED = 280
-export const SPEED_INCREMENT = 25
+export const SPEED_INCREMENT = 50
 export const MAX_SCROLL_SPEED = 700
 export const INITIAL_SPAWN_INTERVAL = 2200
 export const SPAWN_INTERVAL_DECREMENT = 120
