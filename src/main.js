@@ -25,3 +25,10 @@ const config = {
 }
 
 new Phaser.Game(config)
+
+window.addEventListener('message', (e) => {
+  const { type, key } = e.data ?? {}
+  if (type === 'keydown' || type === 'keyup') {
+    window.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true, cancelable: true }))
+  }
+})
