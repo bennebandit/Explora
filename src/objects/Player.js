@@ -109,6 +109,37 @@ export default class Player {
     this.aKey     = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A)
     this.dKey     = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
 
+    this._pointerStart = null
+    this.scene.input.on('pointerdown', (ptr) => {
+      this._pointerStart = { x: ptr.x, y: ptr.y }
+    })
+    this.scene.input.on('pointerup', (ptr) => {
+      if (!this._pointerStart) return
+      const dx   = ptr.x - this._pointerStart.x
+      const dy   = ptr.y - this._pointerStart.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist >= 30) {
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          dx < 0 ? this._touchLeft() : this._touchRight()
+        } else if (dy < 0) {
+          this._touchJump()
+        }
+      } else {
+        const gameH = this.scene.scale.height
+        const gameW = this.scene.scale.width
+        if (ptr.y < gameH * 0.4) {
+          this._touchJump()
+        } else {
+          ptr.x < gameW / 2 ? this._touchLeft() : this._touchRight()
+        }
+      }
+      this._pointerStart = null
+    })
+    this.scene.events.once('shutdown', () => {
+      this.scene.input.off('pointerdown')
+      this.scene.input.off('pointerup')
+    })
+
     this._legPhase = 0
     this._legTimer = this.scene.time.addEvent({
       delay: 110, callback: this._animateLegs, callbackScope: this, loop: true,
@@ -120,21 +151,14 @@ export default class Player {
   update() {
     if (!this.isAlive) return
 
-    if (!this._inputCooldown) {
-      const goLeft  = Phaser.Input.Keyboard.JustDown(this.cursors.left)  ||
-                      Phaser.Input.Keyboard.JustDown(this.aKey)
-      const goRight = Phaser.Input.Keyboard.JustDown(this.cursors.right) ||
-                      Phaser.Input.Keyboard.JustDown(this.dKey)
-
-      if (goLeft)       this._moveToLane(this.currentLane - 1)
-      else if (goRight) this._moveToLane(this.currentLane + 1)
-    }
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.left)  || Phaser.Input.Keyboard.JustDown(this.aKey))  this._touchLeft()
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.dKey))  this._touchRight()
 
     const jumpPressed = Phaser.Input.Keyboard.JustDown(this.cursors.up)   ||
                         Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
                         Phaser.Input.Keyboard.JustDown(this.spaceKey)      ||
                         Phaser.Input.Keyboard.JustDown(this.wKey)
-    if (jumpPressed && !this.isJumping) this._jump()
+    if (jumpPressed) this._touchJump()
 
     this.shadow.x = this.container.x
   }
@@ -162,6 +186,10 @@ export default class Player {
   }
 
   // ─── Private ────────────────────────────────────────────────────────────────
+
+  _touchLeft()  { if (!this._inputCooldown) this._moveToLane(this.currentLane - 1) }
+  _touchRight() { if (!this._inputCooldown) this._moveToLane(this.currentLane + 1) }
+  _touchJump()  { if (!this.isJumping) this._jump() }
 
   _moveToLane(targetLane) {
     if (targetLane < 0 || targetLane >= LANE_X_POSITIONS.length) return
